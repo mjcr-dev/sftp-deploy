@@ -3,7 +3,7 @@
  * SFTP Deploy - Lightweight deployment for any web project.
  * 
  * Uploads your build folder to a remote server via SFTP.
- * Credentials via .env file, project options via config.json
+ * Credentials via .env file, project options via sftp.config.json
  * 
  * @author MJCR <https://mjcr.dev>
  * @license Apache-2.0
@@ -17,11 +17,31 @@ import { fileURLToPath } from 'url';
 import { Client } from 'ssh2';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const CACHE_FILE = path.join(__dirname, '.deploy-cache.json');
+
+/**
+ * Resolves config directory: project root (npm) or script location (manual copy).
+ * @returns {string} Path to configuration directory
+ */
+function getConfigDir() {
+    const projectDir = process.cwd();
+    const scriptDir = __dirname;
+
+    // Check project root first (npm install scenario)
+    if (fs.existsSync(path.join(projectDir, '.env')) ||
+        fs.existsSync(path.join(projectDir, 'sftp.config.json'))) {
+        return projectDir;
+    }
+
+    // Fallback to script directory (manual copy scenario)
+    return scriptDir;
+}
+
+const CONFIG_DIR = getConfigDir();
+const CACHE_FILE = path.join(CONFIG_DIR, '.sftp-deploy-cache.json');
 
 // Load .env file if exists (simple parser, no dependencies)
 function loadEnvFile() {
-    const envPath = path.join(__dirname, '.env');
+    const envPath = path.join(CONFIG_DIR, '.env');
     if (!fs.existsSync(envPath)) return;
 
     const content = fs.readFileSync(envPath, 'utf8');
@@ -120,17 +140,17 @@ const log = {
 };
 
 /**
- * Loads config from config.json with environment variable fallbacks.
+ * Loads config from sftp.config.json with environment variable fallbacks.
  */
 function loadConfig() {
-    const configPath = path.join(__dirname, 'config.json');
+    const configPath = path.join(CONFIG_DIR, 'sftp.config.json');
     let fileConfig = {};
 
     if (fs.existsSync(configPath)) {
         try {
             fileConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         } catch (e) {
-            log.error(`Invalid JSON in config.json: ${e.message}`);
+            log.error(`Invalid JSON in sftp.config.json: ${e.message}`);
             process.exit(1);
         }
     }
@@ -149,7 +169,7 @@ function loadConfig() {
     if (!config.host || !config.username || !config.password || !config.remotePath) {
         log.error('Missing required config: host, username, password, remotePath');
         log.info('Set SFTP_HOST, SFTP_USER, SFTP_PASS, SFTP_PATH env vars');
-        log.info('Or create config.json from config.example.json');
+        log.info('Or create sftp.config.json from sftp.config.example.json');
         process.exit(1);
     }
 

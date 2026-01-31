@@ -13,7 +13,7 @@ A ***lightweight*** *Node.js* script for deploying build outputs to a remote ser
 | Feature | Description |
 |---------|-------------|
 | 🔄 **Incremental Deploys** | Only uploads changed files using SHA256 hashing |
-| 💾 **Local Cache** | Tracks deployed files in `.deploy-cache.json` |
+| 💾 **Local Cache** | Tracks deployed files in `.sftp-deploy-cache.json` |
 | 🛡️ **Safe Uploads** | Shows which remote files will be overwritten before uploading |
 | 🤖 **Unattended Mode** | Force flag for CI/CD and automated pipelines |
 | 📁 **Extra Folders** | Copy additional directories into build before deploy |
@@ -22,22 +22,31 @@ A ***lightweight*** *Node.js* script for deploying build outputs to a remote ser
 
 ## 📥 Installation
 
-### 1. Copy the deploy folder
+### Option A: npm install *(recommended)*
+
+```bash
+npm install @mjcr/sftp-deploy
+```
+
+Then create `.env` in your project root with your credentials.  
+*Optionally, create `sftp.config.json` for additional options (localPath, exclude, etc.).*
+
+### Option B: Copy the deploy folder
 
 ```bash
 cp -r deploy/ your-project/
 ```
 
-### 2. Install dependency
+### Install peer dependency
 
 ```bash
 npm install ssh2
 ```
 
-### 3. Configure credentials
+### Configure credentials
 
 ```bash
-cp deploy/.env.example deploy/.env
+cp .env.example .env
 ```
 
 Edit `.env` with your server details:
@@ -50,7 +59,17 @@ SFTP_PASS=your-password
 SFTP_PATH=/var/www/html
 ```
 
-### 4. Add npm script
+### Add npm script
+
+```json
+{
+  "scripts": {
+    "deploy": "sftp-deploy"
+  }
+}
+```
+
+Or if using manual copy:
 
 ```json
 {
@@ -151,10 +170,10 @@ SFTP_PATH=/var/www/html
 ```
 
 ⚠️ **IMPORTANT**: Add these files to your `.gitignore`:
-- `deploy/.env`
-- `deploy/.deploy-cache.json`
+- `.env`
+- `.sftp-deploy-cache.json`
 
-### Project Options (`config.json`)
+### Project Options (`sftp.config.json`)
 
 Additional options for the deploy process:
 
