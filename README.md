@@ -175,6 +175,8 @@ SFTP_PATH=/var/www/html
 
 ### Project Options (`sftp.config.json`)
 
+*Optional.* If not provided, defaults to uploading the `./dist` folder.
+
 Additional options for the deploy process:
 
 ```json
