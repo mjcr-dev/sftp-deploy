@@ -1,0 +1,14 @@
+{
+    "localPath": "./dist",
+    "copyBeforeDeploy": [
+        {
+            "from": "./backend",
+            "to": "./dist/backend"
+        }
+    ],
+    "exclude": [
+        "*.map",
+        ".DS_Store",
+        "thumbs.db"
+    ]
+}
