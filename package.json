@@ -1,0 +1,32 @@
+{
+    "name": "@mjcr/sftp-deploy",
+    "version": "1.0.0",
+    "description": "Lightweight SFTP deployment for any web project",
+    "main": "deploy.mjs",
+    "bin": {
+        "sftp-deploy": "deploy.mjs"
+    },
+    "type": "module",
+    "keywords": [
+        "sftp",
+        "deploy",
+        "deployment",
+        "upload",
+        "ftp",
+        "ssh",
+        "devops"
+    ],
+    "author": "MJCR <https://mjcr.dev>",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/mjcr-dev/sftp-deploy.git"
+    },
+    "homepage": "https://github.com/mjcr-dev/sftp-deploy#readme",
+    "dependencies": {
+        "ssh2": "^1.16.0"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    }
+}
