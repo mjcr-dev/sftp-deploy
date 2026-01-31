@@ -1,6 +1,6 @@
 {
     "name": "@mjcr/sftp-deploy",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "description": "Lightweight SFTP deployment for any web project",
     "main": "deploy.mjs",
     "bin": {

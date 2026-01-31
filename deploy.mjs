@@ -140,7 +140,9 @@ const log = {
 };
 
 /**
- * Loads config from sftp.config.json with environment variable fallbacks.
+ * Loads configuration.
+ * Credentials: from environment variables (.env file)
+ * Project options: from sftp.config.json
  */
 function loadConfig() {
     const configPath = path.join(CONFIG_DIR, 'sftp.config.json');
@@ -155,25 +157,32 @@ function loadConfig() {
         }
     }
 
-    const config = {
-        host: process.env.SFTP_HOST || fileConfig.host,
-        port: parseInt(process.env.SFTP_PORT) || fileConfig.port || 22,
-        username: process.env.SFTP_USER || fileConfig.username,
-        password: process.env.SFTP_PASS || fileConfig.password,
-        remotePath: process.env.SFTP_PATH || fileConfig.remotePath,
+    // Credentials from environment variables only (security)
+    const host = process.env.SFTP_HOST;
+    const port = parseInt(process.env.SFTP_PORT) || 22;
+    const username = process.env.SFTP_USER;
+    const password = process.env.SFTP_PASS;
+    const remotePath = process.env.SFTP_PATH;
+
+    if (!host || !username || !password || !remotePath) {
+        log.error('Missing credentials in environment variables');
+        log.info('Create a .env file with: SFTP_HOST, SFTP_USER, SFTP_PASS, SFTP_PATH');
+        log.info('See .env.example for reference');
+        log.info('For project options (localPath, exclude), use sftp.config.json');
+        process.exit(1);
+    }
+
+    return {
+        host,
+        port,
+        username,
+        password,
+        remotePath,
+        // Project options from sftp.config.json
         localPath: fileConfig.localPath || './dist',
         copyBeforeDeploy: fileConfig.copyBeforeDeploy || [],
         exclude: fileConfig.exclude || []
     };
-
-    if (!config.host || !config.username || !config.password || !config.remotePath) {
-        log.error('Missing required config: host, username, password, remotePath');
-        log.info('Set SFTP_HOST, SFTP_USER, SFTP_PASS, SFTP_PATH env vars');
-        log.info('Or create sftp.config.json from sftp.config.example.json');
-        process.exit(1);
-    }
-
-    return config;
 }
 
 /**
