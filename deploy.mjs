@@ -60,9 +60,9 @@ loadEnvFile();
 
 // Parse CLI flags
 const args = process.argv.slice(2);
-const FORCE_MODE = args.includes('--overwrite') || args.includes('-o') ||
-    args.includes('--unattended') || args.includes('--auto');
+const FORCE_MODE = args.includes('--unattended');
 const INCREMENTAL_MODE = args.includes('--incremental') || args.includes('-i');
+const CLEAN_MODE = args.includes('--clean');
 
 /**
  * Computes SHA256 hash of a file for change detection.
@@ -164,11 +164,17 @@ function loadConfig() {
     const password = process.env.SFTP_PASS;
     const remotePath = process.env.SFTP_PATH;
 
-    if (!host || !username || !password || !remotePath) {
-        log.error('Missing credentials in environment variables');
-        log.info('Create a .env file with: SFTP_HOST, SFTP_USER, SFTP_PASS, SFTP_PATH');
+    // Validate required credentials
+    const missing = [];
+    if (!host) missing.push('SFTP_HOST');
+    if (!username) missing.push('SFTP_USER');
+    if (!password) missing.push('SFTP_PASS');
+    if (!remotePath) missing.push('SFTP_PATH');
+
+    if (missing.length > 0) {
+        log.error(`Missing or empty: ${missing.join(', ')}`);
+        log.info('Check your .env file has all required values');
         log.info('See .env.example for reference');
-        log.info('For project options (localPath, exclude), use sftp.config.json');
         process.exit(1);
     }
 
@@ -180,7 +186,7 @@ function loadConfig() {
         remotePath,
         // Project options from sftp.config.json
         localPath: fileConfig.localPath || './dist',
-        copyBeforeDeploy: fileConfig.copyBeforeDeploy || [],
+        extraFolders: fileConfig.extraFolders || [],
         exclude: fileConfig.exclude || []
     };
 }
@@ -199,32 +205,6 @@ function confirm(question) {
     });
 }
 
-/**
- * Recursively copies a directory.
- */
-function copyDir(src, dest) {
-    if (!fs.existsSync(src)) {
-        log.warn(`Skip copy: ${src} not found`);
-        return 0;
-    }
-
-    fs.mkdirSync(dest, { recursive: true });
-    let count = 0;
-
-    for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
-        const srcPath = path.join(src, entry.name);
-        const destPath = path.join(dest, entry.name);
-
-        if (entry.isDirectory()) {
-            count += copyDir(srcPath, destPath);
-        } else {
-            fs.copyFileSync(srcPath, destPath);
-            count++;
-        }
-    }
-
-    return count;
-}
 
 /**
  * Recursively collects all files from a directory.
@@ -304,6 +284,35 @@ function checkExistingFiles(sftp, config, files) {
 }
 
 /**
+ * Recursively deletes all files and directories in remote path.
+ * @param {Object} sftp - SFTP connection
+ * @param {string} remotePath - Remote directory to clean
+ */
+async function cleanRemoteDirectory(sftp, remotePath) {
+    return new Promise((resolve, reject) => {
+        sftp.readdir(remotePath, async (err, list) => {
+            if (err) {
+                // Directory doesn't exist or is empty
+                if (err.code === 2) return resolve();
+                return reject(err);
+            }
+
+            for (const item of list) {
+                const itemPath = path.posix.join(remotePath, item.filename);
+
+                if (item.attrs.isDirectory()) {
+                    await cleanRemoteDirectory(sftp, itemPath);
+                    await new Promise(r => sftp.rmdir(itemPath, () => r()));
+                } else {
+                    await new Promise(r => sftp.unlink(itemPath, () => r()));
+                }
+            }
+            resolve();
+        });
+    });
+}
+
+/**
  * Uploads all files to remote server via SFTP.
  */
 async function upload(config, files) {
@@ -317,9 +326,30 @@ async function upload(config, files) {
             conn.sftp(async (err, sftp) => {
                 if (err) return reject(err);
 
-                // Check for existing files first
-                log.info('Checking existing files...');
-                const existing = await checkExistingFiles(sftp, config, files);
+                // Clean mode: delete all files first
+                if (CLEAN_MODE) {
+                    if (!FORCE_MODE) {
+                        console.log();
+                        log.warn(`This will DELETE all files in ${config.remotePath}`);
+                        log.info('(This is relative to your SFTP user\'s root directory)');
+                        const confirmClean = await confirm('Continue? (y/n): ');
+                        if (!confirmClean) {
+                            conn.end();
+                            log.warn('Cancelled');
+                            process.exit(0);
+                        }
+                        console.log();
+                    }
+                    log.info('Cleaning remote directory...');
+                    await cleanRemoteDirectory(sftp, config.remotePath);
+                    log.ok('Remote directory cleaned');
+                }
+
+                // Check for existing files (skip if clean mode)
+                if (!CLEAN_MODE) {
+                    log.info('Checking existing files...');
+                }
+                const existing = CLEAN_MODE ? [] : await checkExistingFiles(sftp, config, files);
 
                 if (existing.length > 0 && !FORCE_MODE) {
                     console.log();
@@ -343,7 +373,7 @@ async function upload(config, files) {
                     }
                     console.log();
                 } else if (existing.length > 0 && FORCE_MODE) {
-                    log.info(`Overwriting ${existing.length} existing files (--overwrite mode)`);
+                    log.info(`Uploading ${existing.length} files (--unattended mode)`);
                 }
 
                 log.info('Uploading...\n');
@@ -401,18 +431,46 @@ async function main() {
         process.exit(1);
     }
 
-    // Pre-deploy copy
-    if (Array.isArray(config.copyBeforeDeploy) && config.copyBeforeDeploy.length > 0) {
-        log.info('Running pre-deploy copy...');
-        for (const { from, to } of config.copyBeforeDeploy) {
-            const count = copyDir(path.resolve(from), path.resolve(to));
-            log.ok(`Copied ${count} files: ${from} → ${to}`);
+    // Collect all files from main build directory
+    let files = collectFiles(localPath, localPath, config.exclude || []);
+
+    // Add extra folders to upload
+    if (Array.isArray(config.extraFolders) && config.extraFolders.length > 0) {
+        log.info('Processing extra folders...');
+        for (const item of config.extraFolders) {
+            let localFolder, remoteBase;
+
+            if (typeof item === 'string') {
+                // Simple string: upload to folder with same name on remote
+                localFolder = path.resolve(item);
+                remoteBase = path.basename(localFolder);
+            } else if (item && typeof item === 'object' && item.from) {
+                // Object with from/to: upload to custom remote path
+                localFolder = path.resolve(item.from);
+                remoteBase = item.to || '';
+            } else {
+                log.error('Invalid extraFolders format');
+                log.info('Use string "./folder" or object { "from": "./folder", "to": "/remote/path" }');
+                process.exit(1);
+            }
+
+            if (!fs.existsSync(localFolder)) {
+                log.warn(`Skip: ${localFolder} not found`);
+                continue;
+            }
+
+            const extraFiles = collectFiles(localFolder, localFolder, config.exclude || []);
+            for (const file of extraFiles) {
+                files.push({
+                    local: file.local,
+                    relative: path.posix.join(remoteBase, file.relative)
+                });
+            }
+            log.ok(`Added ${extraFiles.length} files from ${item.from || item}`);
         }
         console.log();
     }
 
-    // Collect all files from source directory
-    let files = collectFiles(localPath, localPath, config.exclude || []);
     let newHashes = null;
 
     // Incremental mode: filter to only changed files

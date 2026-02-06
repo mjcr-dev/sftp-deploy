@@ -2,7 +2,7 @@
 
 [![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=node.js&logoColor=white)](https://nodejs.org) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
 
-> ***Simple, fast, and reliable SFTP deployments for any web project.***
+> ***Simple and fast SFTP deployments for any web project.***
 
 A ***lightweight*** *Node.js* script for deploying build outputs to a remote server *via **SFTP***. Perfect for *small projects*, *quick prototypes*, or when you need a simple deploy solution without extra infrastructure.
 
@@ -16,40 +16,19 @@ A ***lightweight*** *Node.js* script for deploying build outputs to a remote ser
 | 💾 **Local Cache** | Tracks deployed files in `.sftp-deploy-cache.json` |
 | 🛡️ **Safe Uploads** | Shows which remote files will be overwritten before uploading |
 | 🤖 **Unattended Mode** | Force flag for CI/CD and automated pipelines |
-| 📁 **Extra Folders** | Copy additional directories into build before deploy |
+| 📁 **Extra Folders** | Upload additional folders alongside your build |
 
 ---
 
 ## 📥 Installation
 
-### Option A: npm install *(recommended)*
-
 ```bash
-npm install @mjcr/sftp-deploy
-```
-
-Then create `.env` in your project root with your credentials.  
-*Optionally, create `sftp.config.json` for additional options (localPath, exclude, etc.).*
-
-### Option B: Copy the deploy folder
-
-```bash
-cp -r deploy/ your-project/
-```
-
-### Install peer dependency
-
-```bash
-npm install ssh2
+npm install -D @mjcr/sftp-deploy
 ```
 
 ### Configure credentials
 
-```bash
-cp .env.example .env
-```
-
-Edit `.env` with your server details:
+Create `.env` in your project root:
 
 ```env
 SFTP_HOST=your-server.com
@@ -65,16 +44,6 @@ SFTP_PATH=/var/www/html
 {
   "scripts": {
     "deploy": "sftp-deploy"
-  }
-}
-```
-
-Or if using manual copy:
-
-```json
-{
-  "scripts": {
-    "deploy": "node deploy/deploy.mjs"
   }
 }
 ```
@@ -97,17 +66,25 @@ npm run deploy -- --incremental
 ```
 Only uploads files that have changed since last deploy.
 
-### Force mode (unattended)
+### Unattended mode
 
 ```bash
-npm run deploy -- --overwrite
+npm run deploy -- --unattended
 ```
 Skips all confirmations — perfect for CI/CD pipelines.
+
+### Clean mode
+
+```bash
+npm run deploy -- --clean
+```
+Deletes all files in the remote directory before uploading. Useful when build generates different filenames (like Vite hashed assets).
 
 ### Combined
 
 ```bash
-npm run deploy -- --incremental --overwrite
+npm run deploy -- --incremental --unattended
+npm run deploy -- --clean --unattended
 ```
 
 ---
@@ -117,7 +94,7 @@ npm run deploy -- --incremental --overwrite
 Full unattended build (Vite) + deploy:
 
 ```bash
-npm run build && npm run deploy -- --incremental --overwrite
+npm run build && npm run deploy -- --incremental --unattended
 ```
 
 **Output:**
@@ -131,7 +108,7 @@ dist/assets/index.css   12.34 kB │ gzip:  2.87 kB
 dist/assets/index.js    145.67 kB │ gzip: 46.12 kB
 ✓ built in 1.23s
 
-> node deploy/deploy.mjs --incremental --overwrite
+> sftp-deploy --incremental --unattended
 
 📦 SFTP Deploy
 
@@ -143,7 +120,7 @@ dist/assets/index.js    145.67 kB │ gzip: 46.12 kB
 
 ✓ Connected to server
 ℹ Checking existing files...
-ℹ Overwriting 3 existing files (--overwrite mode)
+ℹ Uploading 3 files (--unattended mode)
 ℹ Uploading...
 
   assets/index-Bx7Kz9Lm.js
@@ -183,7 +160,7 @@ Additional options for the deploy process:
 {
   "localPath": "./dist",
   "exclude": [],
-  "copyBeforeDeploy": []
+  "extraFolders": []
 }
 ```
 
@@ -210,27 +187,30 @@ Patterns support:
 - `filename` — Match exact filename
 - `folder/` — Match folder name anywhere in path
 
-### Copy Before Deploy
+### Extra Folders
 
-Copy additional folders into your build directory before uploading. Useful for adding backend files (like `api/` or `php/`) to a frontend build:
+Upload additional folders alongside your main build. Useful for backend files (API, PHP, etc.):
+
+**Simple format** — uploads to folder with same name:
 
 ```json
 {
-  "copyBeforeDeploy": [
-    { "from": "./api", "to": "./dist/api" },
-    { "from": "./public/assets", "to": "./dist/assets" }
+  "extraFolders": ["./api", "./config"]
+}
+```
+
+**With custom remote path:**
+
+```json
+{
+  "extraFolders": [
+    { "from": "./api", "to": "/backend/api" },
+    { "from": "./php", "to": "/includes" }
   ]
 }
 ```
 
-This runs automatically before the upload starts.
-
----
-
-## 📋 Requirements
-
-- **Node.js** 18+
-- **ssh2** npm package
+You can mix both formats in the same array.
 
 ---
 
