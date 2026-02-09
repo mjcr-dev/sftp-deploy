@@ -1,9 +1,10 @@
 {
     "localPath": "./dist",
-    "copyBeforeDeploy": [
+    "extraFolders": [
+        "./api",
         {
             "from": "./backend",
-            "to": "./dist/backend"
+            "to": "backend"
         }
     ],
     "exclude": [
